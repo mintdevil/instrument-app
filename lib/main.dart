@@ -1,4 +1,5 @@
-import 'package:just_audio/just_audio.dart';
+import 'package:audioplayers/audioplayers.dart';
+import 'package:just_audio/just_audio.dart' as just_audio;
 import 'package:carousel_slider/carousel_slider.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -43,56 +44,25 @@ class MyHomePage extends StatefulWidget {
 class _MyHomePageState extends State<MyHomePage> with WidgetsBindingObserver {
   List<String> instruments = [
     'shaker',
-    // 'guitar',
     'tambourine',
+    'cabasa',
+    'guiro',
     'triangle',
     // 'drumkit'
   ];
 
   final player = AudioPlayer();
-  final metronome = AudioPlayer();
+  final metronome = just_audio.AudioPlayer();
 
   Future<void> _playSound(String instrument, ShakeDirection direction) async {
     final player = AudioPlayer();
-    switch (selectedPitch) {
-      case "High":
-        player.setPitch(1.5);
-        break;
-      case "Normal":
-        player.setPitch(1.0);
-        break;
-      case "Low":
-        player.setPitch(0.5);
-        break;
-      default:
-        player.setPitch(1.0);
-    }
-    if (instrument == 'shaker') {
-      if (direction == ShakeDirection.Down) {
-        await player.setAsset('sounds/shaker-down.wav');
-        await player.play();
-        // await player.play(AssetSource('sounds/shaker-down.wav'));
-      } else if (direction == ShakeDirection.Up) {
-        await player.setAsset('assets/sounds/shaker-up.wav');
-        await player.play();
-        // await player.play(AssetSource('sounds/shaker-up.wav'));
-      } else {
-        await player.setAsset('assets/sounds/shaker-simple.wav');
-        await player.play();
-        // await player.play(AssetSource('sounds/shaker-simple.wav'));
-      }
-    } else {
-      await player.setAsset('assets/sounds/$instrument.wav');
-      await player.play();
-      // await player.play(AssetSource('sounds/$instrument.wav'));
-    }
+    await player.play(AssetSource('sounds/$instrument.wav'));
   }
 
   int _currentIndex = 0;
   bool isMetronomeOn = false;
   double metronomeSpeed = 60;
   bool isRecording = false;
-  String selectedPitch = "Normal";
   late ShakeDetector detector;
 
   @override
@@ -106,7 +76,7 @@ class _MyHomePageState extends State<MyHomePage> with WidgetsBindingObserver {
       },
     );
     metronome.setAsset('assets/sounds/metronome-60bpm.mp3');
-    metronome.setLoopMode(LoopMode.one);
+    metronome.setLoopMode(just_audio.LoopMode.one);
   }
 
   @override
@@ -133,6 +103,8 @@ class _MyHomePageState extends State<MyHomePage> with WidgetsBindingObserver {
       Colors.blue,
       Colors.green,
       Colors.red,
+      Colors.yellow,
+      Colors.orange,
     ];
 
     return pageColors[index % pageColors.length];
@@ -324,62 +296,6 @@ class _MyHomePageState extends State<MyHomePage> with WidgetsBindingObserver {
                         },
                       ),
                     ),
-                    // pitch selection
-                    const SizedBox(height: 30.0),
-                    Container(
-                        margin: const EdgeInsets.all(16.0),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            // low pitch
-                            ElevatedButton(
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: selectedPitch == "Low"
-                                    ? _getPageColor(_currentIndex)
-                                        .withOpacity(0.5)
-                                    : Colors.grey,
-                              ),
-                              onPressed: () {
-                                setState(() {
-                                  selectedPitch = "Low";
-                                });
-                              },
-                              child: const Text("Low"),
-                            ),
-                            const SizedBox(width: 16.0),
-                            // normal pitch
-                            ElevatedButton(
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: selectedPitch == "Normal"
-                                    ? _getPageColor(_currentIndex)
-                                        .withOpacity(0.5)
-                                    : Colors.grey,
-                              ),
-                              onPressed: () {
-                                setState(() {
-                                  selectedPitch = "Normal";
-                                });
-                              },
-                              child: const Text("Normal"),
-                            ),
-                            const SizedBox(width: 16.0),
-                            // high pitch
-                            ElevatedButton(
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: selectedPitch == "High"
-                                    ? _getPageColor(_currentIndex)
-                                        .withOpacity(0.5)
-                                    : Colors.grey,
-                              ),
-                              onPressed: () {
-                                setState(() {
-                                  selectedPitch = "High";
-                                });
-                              },
-                              child: const Text("High"),
-                            )
-                          ],
-                        )),
                   ],
                 ),
               ),
