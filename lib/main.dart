@@ -1,12 +1,15 @@
 import 'package:audioplayers/audioplayers.dart';
-import 'package:just_audio/just_audio.dart' as just_audio;
 import 'package:carousel_slider/carousel_slider.dart';
+import 'package:flutter_spinkit/flutter_spinkit.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import './helpers/shake.dart';
+import './enums.dart';
 import 'dart:async';
 
-import 'drumkit_page.dart';
+import 'test_page.dart';
+
+import 'recordings.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -25,10 +28,7 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Instruments Demo',
-      theme: ThemeData(
-          // primarySwatch: Colors.deepPurple,
-          ),
-      // home: const DrumkitPage(),
+      theme: ThemeData(),
       home: const MyHomePage(),
     );
   }
@@ -47,22 +47,68 @@ class _MyHomePageState extends State<MyHomePage> with WidgetsBindingObserver {
     'tambourine',
     'cabasa',
     'guiro',
-    'triangle',
-    // 'drumkit'
+    // 'triangle',
+    'drumkit'
   ];
 
-  final player = AudioPlayer();
-  final metronome = just_audio.AudioPlayer();
+  final metronome1 = AudioPlayer();
+  final metronome2 = AudioPlayer();
 
-  Future<void> _playSound(String instrument, ShakeDirection direction) async {
+  Future<void> _playSound(String instrument, ShakeAxis axis) async {
     final player = AudioPlayer();
-    await player.play(AssetSource('sounds/$instrument.wav'));
+    player.setPlayerMode(PlayerMode.lowLatency);
+    if (isRecording) {
+      recordTimes.add(DateTime.now().millisecondsSinceEpoch - recordTimes[0]);
+    }
+    switch (instrument) {
+      case "shaker":
+        switch (axis) {
+          case ShakeAxis.lr:
+            await player
+                .play(AssetSource('sounds/$instrument/synth-shaker.wav'));
+            break;
+          case ShakeAxis.ud:
+            await player
+                .play(AssetSource('sounds/$instrument/wood-shaker.wav'));
+            break;
+          case ShakeAxis.fb:
+            await player
+                .play(AssetSource('sounds/$instrument/glass-shaker.wav'));
+            break;
+        }
+      case "drumkit":
+        switch (axis) {
+          case ShakeAxis.lr:
+            await player.play(AssetSource('sounds/$instrument/cymbal.wav'));
+            break;
+          case ShakeAxis.ud:
+            await player
+                .play(AssetSource('sounds/$instrument/hi-hat-closed.wav'));
+            break;
+          case ShakeAxis.fb:
+            await player.play(AssetSource('sounds/$instrument/kick-drum.wav'));
+            break;
+        }
+        break;
+      default:
+        await player.play(AssetSource('sounds/$instrument.wav'));
+        break;
+    }
+  }
+
+  Future<void> _playRecording() async {
+    for (int i = 1; i < recordTimes.length; i++) {
+      int time = recordTimes[i];
+      await Future.delayed(Duration(milliseconds: time));
+      _playSound(instruments[_currentIndex], ShakeAxis.lr);
+    }
   }
 
   int _currentIndex = 0;
   bool isMetronomeOn = false;
   double metronomeSpeed = 60;
   bool isRecording = false;
+  List<int> recordTimes = [];
   late ShakeDetector detector;
 
   @override
@@ -71,17 +117,31 @@ class _MyHomePageState extends State<MyHomePage> with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
 
     detector = ShakeDetector.autoStart(
-      onPhoneShake: (ShakeDirection direction) {
-        _playSound(instruments[_currentIndex], direction);
+      onPhoneShake: (ShakeAxis axis) {
+        _playSound(instruments[_currentIndex], axis);
       },
     );
-    metronome.setAsset('assets/sounds/metronome-60bpm.mp3');
-    metronome.setLoopMode(just_audio.LoopMode.one);
+    metronome1.setSourceAsset('sounds/metronome-60bpm.mp3');
+    metronome1.setReleaseMode(ReleaseMode.loop);
+    metronome1.setPlayerMode(PlayerMode.lowLatency);
+    metronome1.onPlayerComplete.listen((_) => metronome2.resume());
+
+    metronome2.setSourceAsset('sounds/metronome-60bpm.mp3');
+    metronome2.setReleaseMode(ReleaseMode.loop);
+    metronome2.setPlayerMode(PlayerMode.lowLatency);
+    metronome2.onPlayerComplete.listen((_) => metronome1.resume());
   }
 
   @override
   void dispose() {
     detector.stopListening();
+    setState(() {
+      if (isMetronomeOn) {
+        isMetronomeOn = false;
+      }
+    });
+    metronome1.stop();
+    metronome2.stop();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -94,6 +154,13 @@ class _MyHomePageState extends State<MyHomePage> with WidgetsBindingObserver {
     } else if (state == AppLifecycleState.paused) {
       // App is in background or inactive (user just exited the app)
       detector.stopListening();
+      setState(() {
+        if (isMetronomeOn) {
+          isMetronomeOn = false;
+        }
+      });
+      metronome1.stop();
+      metronome2.stop();
     }
   }
 
@@ -103,8 +170,8 @@ class _MyHomePageState extends State<MyHomePage> with WidgetsBindingObserver {
       Colors.blue,
       Colors.green,
       Colors.red,
-      Colors.yellow,
       Colors.orange,
+      Colors.brown
     ];
 
     return pageColors[index % pageColors.length];
@@ -134,10 +201,12 @@ class _MyHomePageState extends State<MyHomePage> with WidgetsBindingObserver {
                     min: 35.0,
                     max: 250.0,
                     divisions: 180,
-                    onChanged: (value) {
+                    onChanged: (value) async {
                       setState(() {
                         metronomeSpeed = value;
                       });
+                      await metronome1.setPlaybackRate(metronomeSpeed / 60);
+                      await metronome2.setPlaybackRate(metronomeSpeed / 60);
                     },
                     activeColor: _getPageColor(_currentIndex),
                     inactiveColor: Colors.grey,
@@ -149,7 +218,8 @@ class _MyHomePageState extends State<MyHomePage> with WidgetsBindingObserver {
                     style: ElevatedButton.styleFrom(
                       backgroundColor: _getPageColor(_currentIndex),
                     ),
-                    child: const Text('OK'),
+                    child:
+                        const Text('OK', style: TextStyle(color: Colors.white)),
                   ),
                 ],
               );
@@ -168,6 +238,7 @@ class _MyHomePageState extends State<MyHomePage> with WidgetsBindingObserver {
               color: _getPageColor(_currentIndex).withOpacity(0.1)),
           child: Stack(
             children: <Widget>[
+              // metronome (top right)
               Positioned(
                 top: 60.0,
                 right: 0.0,
@@ -178,19 +249,20 @@ class _MyHomePageState extends State<MyHomePage> with WidgetsBindingObserver {
                     });
 
                     if (isMetronomeOn) {
-                      await metronome.setSpeed(metronomeSpeed / 60);
-                      metronome.play();
+                      metronome1.resume();
                     } else {
-                      metronome.stop();
+                      metronome1.stop();
+                      metronome2.stop();
                     }
                   },
                   onLongPress: () {
                     setState(() {
                       if (isMetronomeOn) {
                         isMetronomeOn = false;
-                        metronome.stop();
                       }
                     });
+                    metronome1.stop();
+                    metronome2.stop();
                     _showMetronomeSpeedDialog(context);
                   },
                   child: Padding(
@@ -214,40 +286,73 @@ class _MyHomePageState extends State<MyHomePage> with WidgetsBindingObserver {
                   ),
                 ),
               ),
+              // recording (top left)
               Positioned(
-                top: 60.0,
-                left: 0.0,
-                child: GestureDetector(
-                  onTap: () {
-                    setState(() {
-                      isRecording = !isRecording;
-                    });
-                  },
-                  child: Padding(
-                    padding: const EdgeInsets.all(20.0),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Image.asset(
-                          isRecording
-                              ? 'assets/images/pause-button.png'
-                              : 'assets/images/rec-button.png',
-                          width: 50,
-                          height: 50,
-                          fit: BoxFit.contain,
-                        ),
-                        const SizedBox(height: 8),
-                        isRecording
-                            ? const Text(
-                                'Recording...',
-                                style: TextStyle(fontSize: 16),
+                  top: 60.0,
+                  left: 0.0,
+                  child: GestureDetector(
+                    onTap: () {
+                      setState(() {
+                        isRecording = !isRecording;
+                      });
+
+                      if (isRecording) {
+                        recordTimes = [DateTime.now().millisecondsSinceEpoch];
+                      } else {
+                        print(recordTimes);
+                      }
+                    },
+                    child: AnimatedContainer(
+                      margin: const EdgeInsets.all(20.0),
+                      duration: const Duration(milliseconds: 300),
+                      curve: Curves.easeInOut,
+                      width: 60.0,
+                      height: 60.0,
+                      decoration: BoxDecoration(
+                        color: isRecording
+                            ? Colors.red
+                            : _getPageColor(_currentIndex).withOpacity(0.5),
+                        borderRadius: BorderRadius.circular(40.0),
+                      ),
+                      child: Center(
+                        child: isRecording
+                            ? const SpinKitPulse(
+                                color: Colors.white,
+                                size: 50.0,
                               )
-                            : Container(),
-                      ],
+                            : const Icon(
+                                Icons.fiber_manual_record,
+                                size: 35.0,
+                                color: Colors.white,
+                              ),
+                      ),
                     ),
-                  ),
-                ),
-              ),
+                  )),
+              Positioned(
+                  top: 85.0,
+                  left: MediaQuery.of(context).size.width / 2 - 65.0,
+                  child: GestureDetector(
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const RecordingsPage(),
+                        ),
+                      );
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.all(10.0),
+                      width: 130.0,
+                      height: 50.0,
+                      decoration: BoxDecoration(
+                        color: _getPageColor(_currentIndex).withOpacity(0.5),
+                        borderRadius: BorderRadius.circular(10.0),
+                      ),
+                      child: const Center(
+                        child: Text("View Recordings", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold))
+                      ),
+                    ),
+                  )),
               Center(
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -256,38 +361,34 @@ class _MyHomePageState extends State<MyHomePage> with WidgetsBindingObserver {
                       itemCount: instruments.length,
                       itemBuilder: (context, index, realIndex) {
                         String instrument = instruments[index];
-                        if (instrument != 'drumkit') {
-                          String imagePath = 'assets/images/$instrument.png';
-                          return GestureDetector(
-                            onTap: () {
-                              _playSound(instrument, ShakeDirection.None);
-                            },
-                            child: Padding(
-                              padding: const EdgeInsets.all(12.0),
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Image.asset(
-                                    imagePath,
-                                    width: 150,
-                                    height: 150,
-                                    fit: BoxFit.contain,
-                                  ),
-                                  const SizedBox(height: 30),
-                                  Text(
-                                    instrument,
-                                    style: const TextStyle(fontSize: 32),
-                                  ),
-                                ],
-                              ),
+                        String imagePath = 'assets/images/$instrument.png';
+                        return GestureDetector(
+                          onTap: () {
+                            _playSound(instrument, ShakeAxis.lr);
+                          },
+                          child: Padding(
+                            padding: const EdgeInsets.all(12.0),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Image.asset(
+                                  imagePath,
+                                  width: 150,
+                                  height: 150,
+                                  fit: BoxFit.contain,
+                                ),
+                                const SizedBox(height: 30),
+                                Text(
+                                  instrument,
+                                  style: const TextStyle(fontSize: 32),
+                                ),
+                              ],
                             ),
-                          );
-                        } else {
-                          return const DrumkitPage();
-                        }
+                          ),
+                        );
                       },
                       options: CarouselOptions(
-                        height: 242,
+                        height: 250,
                         enableInfiniteScroll: false,
                         onPageChanged: (index, reason) {
                           setState(() {
