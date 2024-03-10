@@ -36,8 +36,8 @@ Wav mixSounds(List<double> timestamps, List<double> volumes, Uint8List byteArray
   final chan = <Float64List>[];
   List<double> combinedList = [];
 
-  double beat = speed / 60 * 1000;
-  double halfBeat = speed / 60 * 500;
+  double beat = 60 / speed * 1000;
+  double halfBeat = 60 / speed * 500;
 
   timestamps = timestamps.map((timestamp) => snapToBeat(timestamp, beat, halfBeat)).toList();
   [timestamps, volumes] = removeDuplicates(timestamps, volumes);

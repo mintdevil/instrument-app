@@ -552,6 +552,8 @@ class _MyHomePageState extends State<MyHomePage> with WidgetsBindingObserver {
                       });
 
                       if (isRecording) {
+                        metronome1.stop();
+                        metronome2.stop();
                         showCountdownDialog();
                       } else {
                         setState(() {
