@@ -1,7 +1,5 @@
 import 'dart:io';
-
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'player_widget.dart';
@@ -25,6 +23,46 @@ class RecordingsPageState extends State<RecordingsPage> {
     super.initState();
   }
 
+  void showDeleteConfirmationDialog(BuildContext context, String filePath, String fileName) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          backgroundColor: Colors.white,
+          title: Text('Are you sure you want to delete $fileName?', textAlign: TextAlign.center),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop(); // Close the dialog
+              },
+              style: TextButton.styleFrom(
+                backgroundColor: Colors.grey,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10.0), 
+                ),
+              ),
+              child: const Text('Cancel', style: TextStyle(color: Colors.white)),
+            ),
+            TextButton(
+              onPressed: () async {
+                await deleteRecording(filePath);
+                setState(() {});
+                Navigator.of(context).pop(); // Close the dialog
+              },
+              style: TextButton.styleFrom(
+                backgroundColor: Colors.red,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10.0), 
+                ),
+              ),
+              child: const Text('Delete', style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -42,30 +80,6 @@ class RecordingsPageState extends State<RecordingsPage> {
             return Center(
               child: Text('Error: ${snapshot.error}'),
             );
-          } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
-            return Center(
-                child: Column(
-              children: [
-                const Text('No recordings available.'),
-                GestureDetector(
-                  onTap: () {
-                    copyWavFileFromAssets();
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.all(10.0),
-                    width: 130.0,
-                    height: 50.0,
-                    decoration: BoxDecoration(
-                      color: Colors.red,
-                      borderRadius: BorderRadius.circular(10.0),
-                    ),
-                    child: const Text("Copy Wav File",
-                        style: TextStyle(
-                            color: Colors.white, fontWeight: FontWeight.bold)),
-                  ),
-                ),
-              ],
-            ));
           } else {
             List<AudioPlayer> audioPlayers = List.generate(
               snapshot.data?.length ?? 0,
@@ -93,30 +107,24 @@ class RecordingsPageState extends State<RecordingsPage> {
                             });
                           },
                           subtitle: Padding(
-                              padding:
-                                  const EdgeInsets.symmetric(vertical: 8.0),
-                              child:
-                                  PlayerWidget(player: audioPlayers[index])));
+                            padding: const EdgeInsets.symmetric(vertical: 8.0),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: PlayerWidget(player: audioPlayers[index]),
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.delete),
+                                  onPressed: () {
+                                    showDeleteConfirmationDialog(context, filePath, fileName);
+                                  },
+                                ),
+                              ],
+                            ),
+                          ));
                     },
                   ),
                 ),
-                // GestureDetector(
-                //   onTap: () {
-                //     copyWavFileFromAssets();
-                //   },
-                //   child: Container(
-                //     padding: const EdgeInsets.all(10.0),
-                //     width: 130.0,
-                //     height: 50.0,
-                //     decoration: BoxDecoration(
-                //       color: Colors.red,
-                //       borderRadius: BorderRadius.circular(10.0),
-                //     ),
-                //     child: const Text("Copy Wav File",
-                //         style: TextStyle(
-                //             color: Colors.white, fontWeight: FontWeight.bold)),
-                //   ),
-                // ),
               ],
             );
           }
@@ -137,37 +145,8 @@ class RecordingsPageState extends State<RecordingsPage> {
     return files.map((file) => file.path).toList();
   }
 
-  Future<void> copyWavFileFromAssets() async {
-    // Get the current date and time
-    DateTime now = DateTime.now();
-    String timestamp =
-        '${now.year}_${now.month}_${now.day}_${now.hour}_${now.minute}_${now.second}';
-
-    // Get the application documents directory
-    Directory appDocDir = await getApplicationDocumentsDirectory();
-    String appDocPath = appDocDir.path;
-
-    // Construct the file path with a timestamp for the WAV file in the documents directory
-    String filePath = '$appDocPath/wavfile_$timestamp.wav';
-
-    // Check if the file already exists to avoid overwriting
-    int index = 1;
-    while (File(filePath).existsSync()) {
-      // If the file exists, modify the file name by adding an index
-      filePath = '$appDocPath/wavfile_${timestamp}_$index.wav';
-      index++;
-    }
-
-    // Copy the WAV file from assets to the documents directory
-    ByteData data = await rootBundle.load('assets/sounds/metronome-60bpm.mp3');
-    List<int> bytes = data.buffer.asUint8List();
-    await File(filePath).writeAsBytes(bytes);
-
-    // Show a SnackBar after saving
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('file saved successfully.'),
-      ),
-    );
+  Future<void> deleteRecording(String filePath) async {
+    File file = File(filePath);
+    await file.delete();
   }
 }

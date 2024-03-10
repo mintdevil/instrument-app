@@ -76,7 +76,7 @@ class _PlayerWidgetState extends State<PlayerWidget> {
 
   @override
   Widget build(BuildContext context) {
-    final color = Theme.of(context).primaryColor;
+    const color = Colors.black;
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: <Widget>[
@@ -107,6 +107,8 @@ class _PlayerWidgetState extends State<PlayerWidget> {
           ],
         ),
         Slider(
+          activeColor: color,
+          inactiveColor: color.withOpacity(0.3),
           onChanged: (value) {
             final duration = _duration;
             if (duration == null) {
