@@ -1,6 +1,6 @@
 {
-    "name": "instrument_app",
-    "short_name": "instrument_app",
+    "name": "ShakeBeat",
+    "short_name": "ShakeBeat",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
