@@ -58,7 +58,7 @@ class _MyHomePageState extends State<MyHomePage> with WidgetsBindingObserver {
   final metronome2 = AudioPlayer();
   final recordingPlayer = AudioPlayer();
 
-  Future<void> _playSound(String instrument, double loudness) async {
+  void _playSound(String instrument, double loudness) {
     final player = AudioPlayer();
     player.setPlayerMode(PlayerMode.lowLatency);
     if (volumeFixed) {
@@ -77,20 +77,20 @@ class _MyHomePageState extends State<MyHomePage> with WidgetsBindingObserver {
     switch (instrument) {
       case "drum":
         if (selectedDrum == "kick") {
-          await player.play(AssetSource('sounds/kick-drum.wav'));
+          player.play(AssetSource('sounds/kick-drum.wav'));
         } else {
-          await player.play(AssetSource('sounds/snare-drum.wav'));
+          player.play(AssetSource('sounds/snare-drum.wav'));
         }
         break;
       case "hi-hat":
         if (selectedHiHat == "closed") {
-          await player.play(AssetSource('sounds/hi-hat-closed.wav'));
+          player.play(AssetSource('sounds/hi-hat-closed.wav'));
         } else {
-          await player.play(AssetSource('sounds/hi-hat-open.wav'));
+          player.play(AssetSource('sounds/hi-hat-open.wav'));
         }
         break;
       default:
-        await player.play(AssetSource('sounds/$instrument.wav'));
+        player.play(AssetSource('sounds/$instrument.wav'));
         break;
     }
   }
@@ -162,6 +162,7 @@ class _MyHomePageState extends State<MyHomePage> with WidgetsBindingObserver {
     });
     metronome1.stop();
     metronome2.stop();
+    recordingPlayer.stop();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -181,6 +182,7 @@ class _MyHomePageState extends State<MyHomePage> with WidgetsBindingObserver {
       });
       metronome1.stop();
       metronome2.stop();
+      recordingPlayer.stop();
     }
   }
 
@@ -201,6 +203,7 @@ class _MyHomePageState extends State<MyHomePage> with WidgetsBindingObserver {
   Future<void> _showMetronomeSpeedDialog(BuildContext context) async {
     return showDialog(
       context: context,
+      barrierDismissible: false,
       builder: (BuildContext context) {
         return AlertDialog(
           title: const Text('Set Metronome Speed'),
@@ -235,6 +238,7 @@ class _MyHomePageState extends State<MyHomePage> with WidgetsBindingObserver {
                   ElevatedButton(
                     onPressed: () {
                       Navigator.of(context).pop();
+                      metronome1.resume();
                     },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: _getPageColor(_currentIndex),
@@ -251,7 +255,7 @@ class _MyHomePageState extends State<MyHomePage> with WidgetsBindingObserver {
     );
   }
 
-  Future<void> _showVolumeDialog(BuildContext context) async {
+  Future<void> _showVolumeDialog(BuildContext context) {
     return showDialog(
       context: context,
       builder: (BuildContext context) {
@@ -275,7 +279,7 @@ class _MyHomePageState extends State<MyHomePage> with WidgetsBindingObserver {
                     min: 0.0,
                     max: 1.0,
                     divisions: 10,
-                    onChanged: (value) async {
+                    onChanged: (value) {
                       setState(() {
                         fixedVolume = value;
                       });
@@ -323,6 +327,7 @@ class _MyHomePageState extends State<MyHomePage> with WidgetsBindingObserver {
               const SizedBox(height: 20),
               ElevatedButton(
                 onPressed: () {
+                  player.stop();
                   Navigator.of(context).pop();
                   // reset variables
                   setState(() {
@@ -334,7 +339,8 @@ class _MyHomePageState extends State<MyHomePage> with WidgetsBindingObserver {
                     style: TextStyle(color: _getPageColor(_currentIndex))),
               ),
               ElevatedButton(
-                onPressed: () async {
+                onPressed: () {
+                  player.stop();
                   setState(() {
                     recording = mixedSound;
                     timestamps = [];
@@ -347,6 +353,7 @@ class _MyHomePageState extends State<MyHomePage> with WidgetsBindingObserver {
               ),
               ElevatedButton(
                 onPressed: () async {
+                  player.stop();
                   recording = mixedSound;
                   String? fileName = await showFileNameInputDialog(context);
                   // Get the application documents directory
@@ -388,7 +395,7 @@ class _MyHomePageState extends State<MyHomePage> with WidgetsBindingObserver {
     );
   }
 
-  Future<String?> showFileNameInputDialog(BuildContext context) async {
+  Future<String?> showFileNameInputDialog(BuildContext context) {
     TextEditingController controller = TextEditingController();
     return showDialog<String>(
       context: context,
@@ -431,12 +438,12 @@ class _MyHomePageState extends State<MyHomePage> with WidgetsBindingObserver {
             textAlign: TextAlign.center,
           ),
           interval: const Duration(milliseconds: 1000),
-          onFinished: () {
+          onFinished: () async {
             Navigator.of(context).pop();
             if (recording != null) {
-              recordingPlayer.setSourceBytes(recording!.write());
+              await recordingPlayer.setSourceBytes(recording!.write());
+              recordingPlayer.resume();
             }
-            recordingPlayer.resume();
             if (!isMetronomeOn) {
               setState(() {
                 isMetronomeOn = true;
@@ -467,27 +474,17 @@ class _MyHomePageState extends State<MyHomePage> with WidgetsBindingObserver {
                 top: 60.0,
                 right: 0.0,
                 child: GestureDetector(
-                  onTap: () async {
+                  onTap: () {
                     setState(() {
                       isMetronomeOn = !isMetronomeOn;
                     });
 
                     if (isMetronomeOn) {
-                      metronome1.resume();
+                      _showMetronomeSpeedDialog(context);
                     } else {
                       metronome1.stop();
                       metronome2.stop();
                     }
-                  },
-                  onLongPress: () {
-                    setState(() {
-                      if (isMetronomeOn) {
-                        isMetronomeOn = false;
-                      }
-                    });
-                    metronome1.stop();
-                    metronome2.stop();
-                    _showMetronomeSpeedDialog(context);
                   },
                   child: Padding(
                     padding: const EdgeInsets.all(20.0),
@@ -515,7 +512,7 @@ class _MyHomePageState extends State<MyHomePage> with WidgetsBindingObserver {
                 top: 160.0,
                 right: 0.0,
                 child: GestureDetector(
-                  onTap: () async {
+                  onTap: () {
                     setState(() {
                       volumeFixed = !volumeFixed;
                     });
@@ -549,7 +546,7 @@ class _MyHomePageState extends State<MyHomePage> with WidgetsBindingObserver {
                   top: 60.0,
                   left: 0.0,
                   child: GestureDetector(
-                    onTap: () async {
+                    onTap: () {
                       setState(() {
                         isRecording = !isRecording;
                       });
@@ -562,6 +559,7 @@ class _MyHomePageState extends State<MyHomePage> with WidgetsBindingObserver {
                         });
                         metronome1.stop();
                         metronome2.stop();
+                        recordingPlayer.stop();
                         showRecordingOptions(context);
                       }
                     },

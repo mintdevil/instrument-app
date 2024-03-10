@@ -67,6 +67,7 @@ class _PlayerWidgetState extends State<PlayerWidget> {
 
   @override
   void dispose() {
+    player.stop();
     _durationSubscription?.cancel();
     _positionSubscription?.cancel();
     _playerCompleteSubscription?.cancel();
