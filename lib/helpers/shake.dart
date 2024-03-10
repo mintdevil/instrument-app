@@ -1,11 +1,10 @@
 import 'dart:async';
 import 'dart:math';
-import '../enums.dart';
 
 import 'package:sensors_plus/sensors_plus.dart';
 
 /// Callback for phone shakes
-typedef PhoneShakeCallback = void Function(ShakeAxis axis);
+typedef PhoneShakeCallback = void Function( double loudness);
 
 /// ShakeDetector class for phone shake functionality
 class ShakeDetector {
@@ -55,14 +54,8 @@ class ShakeDetector {
   }
 
   double prevX = 0;
-  double lowestX = 100000;
-  List<double> xShakes = [];
   double prevY = 0;
-  double lowestY = 100000;
-  List<double> yShakes = [];
   double prevZ = 0;
-  double lowestZ = 100000;
-  List<double> zShakes = [];
   double prevGForce = 0;
   double prevGRate = 0;
   bool gRateMatch = false;
@@ -74,23 +67,8 @@ class ShakeDetector {
             .listen(
       (AccelerometerEvent event) {
         double x = event.x;
-        if (lowestX == 100000) {
-          lowestX = x;
-        } else if (x < lowestX) {
-          lowestX = x;
-        }
         double y = event.y;
-        if (lowestY == 100000) {
-          lowestY = y;
-        } else if (y < lowestY) {
-          lowestY = y;
-        }
         double z = event.z;
-        if (lowestZ == 100000) {
-          lowestZ = z;
-        } else if (z < lowestZ) {
-          lowestZ = z;
-        }
 
         double timestamp = DateTime.now().millisecondsSinceEpoch / 1000.0;
 
@@ -138,9 +116,13 @@ class ShakeDetector {
         // print("z: $z");
 
         if (gRateMatch && gForceMA > shakeThresholdGravity) {
+          // adjust loudness based on gForce
+          double loudness = 1.0;
+          if (gForce < 1.5) {
+            loudness = (gForceMA - 1.3) / (1.5 - 1.3) * (1.0 - 0.2) + 0.2;
+          }
+
           gRateMatch = false;
-          // print("gForce: $gForce, prevGForce: $prevGForce, gRate: $gRate, prevGRate: $prevGRate");
-          // print("gRate: $gRate, prevGRate: $prevGRate");
           var now = DateTime.now().millisecondsSinceEpoch;
           // ignore shake events too close to each other (100ms)
           if (mShakeTimestamp + shakeSlopTimeMS > now) {
@@ -149,26 +131,7 @@ class ShakeDetector {
 
           mShakeTimestamp = now;
 
-          double xDiff = (lowestX - x).abs();
-          double yDiff = (lowestY - y).abs();
-          double zDiff = (lowestZ - z).abs();
-
-          if (xDiff > yDiff && xDiff > zDiff) {
-            // xShakes.add(xDiff);
-            onPhoneShake(ShakeAxis.lr);
-          } else if (yDiff > xDiff && yDiff > zDiff) {
-            // yShakes.add(yDiff);
-            onPhoneShake(ShakeAxis.ud);
-          } else if (zDiff > xDiff && zDiff > yDiff) {
-            // zShakes.add(zDiff);
-            onPhoneShake(ShakeAxis.fb);
-          }
-
-          // reset lowest values
-          lowestX = 100000;
-          lowestY = 100000;
-          lowestZ = 100000;
-          // onPhoneShake();
+          onPhoneShake(loudness);
         }
       },
     );
