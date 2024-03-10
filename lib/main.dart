@@ -1,14 +1,16 @@
+import 'dart:async';
+import 'dart:io';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:carousel_slider/carousel_slider.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:timer_count_down/timer_count_down.dart';
+import 'package:wav/wav.dart';
 import './helpers/shake.dart';
-import './enums.dart';
-import 'dart:async';
-
-import 'test_page.dart';
-
+import './helpers/audio_processing.dart';
+import 'player_widget.dart';
 import 'recordings.dart';
 
 void main() {
@@ -47,47 +49,44 @@ class _MyHomePageState extends State<MyHomePage> with WidgetsBindingObserver {
     'tambourine',
     'cabasa',
     'guiro',
-    // 'triangle',
-    'drumkit'
+    'drum',
+    'hi-hat',
+    'cymbal',
   ];
 
   final metronome1 = AudioPlayer();
   final metronome2 = AudioPlayer();
+  final recordingPlayer = AudioPlayer();
 
-  Future<void> _playSound(String instrument, ShakeAxis axis) async {
+  Future<void> _playSound(String instrument, double loudness) async {
     final player = AudioPlayer();
     player.setPlayerMode(PlayerMode.lowLatency);
+    if (volumeFixed) {
+      player.setVolume(fixedVolume);
+    } else {
+      player.setVolume(loudness);
+    }
     if (isRecording) {
-      recordTimes.add(DateTime.now().millisecondsSinceEpoch - recordTimes[0]);
+      timestamps.add(DateTime.now().millisecondsSinceEpoch - timestamps[0]);
+      if (volumeFixed) {
+        volumes.add(fixedVolume);
+      } else {
+        volumes.add(loudness);
+      }
     }
     switch (instrument) {
-      case "shaker":
-        switch (axis) {
-          case ShakeAxis.lr:
-            await player
-                .play(AssetSource('sounds/$instrument/synth-shaker.wav'));
-            break;
-          case ShakeAxis.ud:
-            await player
-                .play(AssetSource('sounds/$instrument/wood-shaker.wav'));
-            break;
-          case ShakeAxis.fb:
-            await player
-                .play(AssetSource('sounds/$instrument/glass-shaker.wav'));
-            break;
+      case "drum":
+        if (selectedDrum == "kick") {
+          await player.play(AssetSource('sounds/kick-drum.wav'));
+        } else {
+          await player.play(AssetSource('sounds/snare-drum.wav'));
         }
-      case "drumkit":
-        switch (axis) {
-          case ShakeAxis.lr:
-            await player.play(AssetSource('sounds/$instrument/cymbal.wav'));
-            break;
-          case ShakeAxis.ud:
-            await player
-                .play(AssetSource('sounds/$instrument/hi-hat-closed.wav'));
-            break;
-          case ShakeAxis.fb:
-            await player.play(AssetSource('sounds/$instrument/kick-drum.wav'));
-            break;
+        break;
+      case "hi-hat":
+        if (selectedHiHat == "closed") {
+          await player.play(AssetSource('sounds/hi-hat-closed.wav'));
+        } else {
+          await player.play(AssetSource('sounds/hi-hat-open.wav'));
         }
         break;
       default:
@@ -96,20 +95,39 @@ class _MyHomePageState extends State<MyHomePage> with WidgetsBindingObserver {
     }
   }
 
-  Future<void> _playRecording() async {
-    for (int i = 1; i < recordTimes.length; i++) {
-      int time = recordTimes[i];
-      await Future.delayed(Duration(milliseconds: time));
-      _playSound(instruments[_currentIndex], ShakeAxis.lr);
+  Future<Uint8List> getInstrumentBytes(String instrument) async {
+    ByteData data;
+    switch (instrument) {
+      case "drum":
+        if (selectedDrum == "kick") {
+          data = await rootBundle.load('assets/sounds/kick-drum.bin');
+        } else {
+          data = await rootBundle.load('assets/sounds/snare-drum.bin');
+        }
+      case "hi-hat":
+        if (selectedHiHat == "closed") {
+          data = await rootBundle.load('assets/sounds/hi-hat-closed.bin');
+        } else {
+          data = await rootBundle.load('assets/sounds/hi-hat-open.bin');
+        }
+      default:
+        data = await rootBundle.load('assets/sounds/$instrument.bin');
     }
+    return data.buffer.asUint8List();
   }
 
   int _currentIndex = 0;
   bool isMetronomeOn = false;
   double metronomeSpeed = 60;
   bool isRecording = false;
-  List<int> recordTimes = [];
+  List<double> timestamps = [];
+  List<double> volumes = [];
+  Wav? recording;
   late ShakeDetector detector;
+  String selectedDrum = "kick";
+  String selectedHiHat = "closed";
+  bool volumeFixed = false;
+  double fixedVolume = 1.0;
 
   @override
   void initState() {
@@ -117,8 +135,8 @@ class _MyHomePageState extends State<MyHomePage> with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
 
     detector = ShakeDetector.autoStart(
-      onPhoneShake: (ShakeAxis axis) {
-        _playSound(instruments[_currentIndex], axis);
+      onPhoneShake: (double loudness) {
+        _playSound(instruments[_currentIndex], loudness);
       },
     );
     metronome1.setSourceAsset('sounds/metronome-60bpm.mp3');
@@ -130,6 +148,8 @@ class _MyHomePageState extends State<MyHomePage> with WidgetsBindingObserver {
     metronome2.setReleaseMode(ReleaseMode.loop);
     metronome2.setPlayerMode(PlayerMode.lowLatency);
     metronome2.onPlayerComplete.listen((_) => metronome1.resume());
+
+    recordingPlayer.setReleaseMode(ReleaseMode.stop);
   }
 
   @override
@@ -171,7 +191,8 @@ class _MyHomePageState extends State<MyHomePage> with WidgetsBindingObserver {
       Colors.green,
       Colors.red,
       Colors.orange,
-      Colors.brown
+      Colors.brown,
+      Colors.indigo
     ];
 
     return pageColors[index % pageColors.length];
@@ -226,6 +247,209 @@ class _MyHomePageState extends State<MyHomePage> with WidgetsBindingObserver {
             },
           ),
         );
+      },
+    );
+  }
+
+  Future<void> _showVolumeDialog(BuildContext context) async {
+    return showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Set Volume'),
+          content: StatefulBuilder(
+            builder: (BuildContext context, StateSetter setState) {
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Align(
+                    alignment: Alignment.center,
+                    child: Text(
+                      'Current Volume: $fixedVolume',
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                  Slider(
+                    value: fixedVolume,
+                    min: 0.0,
+                    max: 1.0,
+                    divisions: 10,
+                    onChanged: (value) async {
+                      setState(() {
+                        fixedVolume = value;
+                      });
+                    },
+                    activeColor: _getPageColor(_currentIndex),
+                    inactiveColor: Colors.grey,
+                  ),
+                  ElevatedButton(
+                    onPressed: () {
+                      Navigator.of(context).pop();
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: _getPageColor(_currentIndex),
+                    ),
+                    child:
+                        const Text('OK', style: TextStyle(color: Colors.white)),
+                  ),
+                ],
+              );
+            },
+          ),
+        );
+      },
+    );
+  }
+
+  void showRecordingOptions(BuildContext context) async {
+    Wav mixedSound = mixSounds(timestamps.sublist(1), volumes,
+        await getInstrumentBytes(instruments[_currentIndex]), metronomeSpeed,
+        existingWav: recording);
+    AudioPlayer player = AudioPlayer()
+      ..setReleaseMode(ReleaseMode.stop)
+      ..setSourceBytes(mixedSound.write());
+    // ignore: use_build_context_synchronously
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          backgroundColor: Colors.white,
+          title: const Text('Recording Options', textAlign: TextAlign.center),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              PlayerWidget(player: player),
+              const SizedBox(height: 20),
+              ElevatedButton(
+                onPressed: () {
+                  Navigator.of(context).pop();
+                  // reset variables
+                  setState(() {
+                    timestamps = [];
+                    volumes = [];
+                  });
+                },
+                child: Text('Re-record',
+                    style: TextStyle(color: _getPageColor(_currentIndex))),
+              ),
+              ElevatedButton(
+                onPressed: () async {
+                  setState(() {
+                    recording = mixedSound;
+                    timestamps = [];
+                    volumes = [];
+                  });
+                  Navigator.of(context).pop();
+                },
+                child: Text('Continue Overlaying Sounds',
+                    style: TextStyle(color: _getPageColor(_currentIndex))),
+              ),
+              ElevatedButton(
+                onPressed: () async {
+                  recording = mixedSound;
+                  String? fileName = await showFileNameInputDialog(context);
+                  // Get the application documents directory
+                  Directory appDocDir =
+                      await getApplicationDocumentsDirectory();
+                  String appDocPath = appDocDir.path;
+                  while (fileName != null &&
+                      fileName.isNotEmpty &&
+                      File(fileName).existsSync()) {
+                    // ignore: use_build_context_synchronously
+                    fileName = await showFileNameInputDialog(context);
+                  }
+                  if (fileName == null) {
+                    // Get the current date and time
+                    DateTime now = DateTime.now();
+                    String timestamp =
+                        '${now.year}_${now.month}_${now.day}_${now.hour}_${now.minute}_${now.second}';
+                    fileName = 'recording_$timestamp';
+                  }
+
+                  File file = File('$appDocPath/$fileName.wav');
+                  await file.writeAsBytes(recording!.write());
+
+                  // reset variables
+                  setState(() {
+                    recording = null;
+                    timestamps = [];
+                    volumes = [];
+                  });
+                  Navigator.of(context).pop();
+                },
+                child: Text('Stop Overlaying and Save',
+                    style: TextStyle(color: _getPageColor(_currentIndex))),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Future<String?> showFileNameInputDialog(BuildContext context) async {
+    TextEditingController controller = TextEditingController();
+    return showDialog<String>(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Enter File Name', textAlign: TextAlign.center),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: controller,
+                decoration: const InputDecoration(hintText: 'File Name'),
+              ),
+              const Text('.wav', style: TextStyle(fontSize: 12.0)),
+            ],
+          ),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop(controller.text);
+              },
+              child: const Text('OK'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void showCountdownDialog() {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+            content: Countdown(
+          seconds: 3,
+          build: (BuildContext context, double time) => Text(
+            time.toString(),
+            style: const TextStyle(fontSize: 50),
+            textAlign: TextAlign.center,
+          ),
+          interval: const Duration(milliseconds: 1000),
+          onFinished: () {
+            Navigator.of(context).pop();
+            if (recording != null) {
+              recordingPlayer.setSourceBytes(recording!.write());
+            }
+            recordingPlayer.resume();
+            if (!isMetronomeOn) {
+              setState(() {
+                isMetronomeOn = true;
+              });
+              metronome1.resume();
+            } else {
+              metronome1.stop();
+              metronome2.stop();
+              metronome1.resume();
+            }
+            timestamps = [DateTime.now().millisecondsSinceEpoch.toDouble()];
+          },
+        ));
       },
     );
   }
@@ -286,20 +510,59 @@ class _MyHomePageState extends State<MyHomePage> with WidgetsBindingObserver {
                   ),
                 ),
               ),
+              // set volume (top right below metronome)
+              Positioned(
+                top: 160.0,
+                right: 0.0,
+                child: GestureDetector(
+                  onTap: () async {
+                    setState(() {
+                      volumeFixed = !volumeFixed;
+                    });
+                    if (volumeFixed) {
+                      _showVolumeDialog(context);
+                    }
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.all(20.0),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Image.asset(
+                          'assets/images/volume.png',
+                          width: 40,
+                          height: 40,
+                          fit: BoxFit.contain,
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          volumeFixed ? 'Fixed' : 'Variable',
+                          style: const TextStyle(fontSize: 16),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
               // recording (top left)
               Positioned(
                   top: 60.0,
                   left: 0.0,
                   child: GestureDetector(
-                    onTap: () {
+                    onTap: () async {
                       setState(() {
                         isRecording = !isRecording;
                       });
 
                       if (isRecording) {
-                        recordTimes = [DateTime.now().millisecondsSinceEpoch];
+                        showCountdownDialog();
                       } else {
-                        print(recordTimes);
+                        setState(() {
+                          isMetronomeOn = false;
+                        });
+                        metronome1.stop();
+                        metronome2.stop();
+                        showRecordingOptions(context);
                       }
                     },
                     child: AnimatedContainer(
@@ -349,8 +612,10 @@ class _MyHomePageState extends State<MyHomePage> with WidgetsBindingObserver {
                         borderRadius: BorderRadius.circular(10.0),
                       ),
                       child: const Center(
-                        child: Text("View Recordings", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold))
-                      ),
+                          child: Text("View Recordings",
+                              style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold))),
                     ),
                   )),
               Center(
@@ -364,7 +629,7 @@ class _MyHomePageState extends State<MyHomePage> with WidgetsBindingObserver {
                         String imagePath = 'assets/images/$instrument.png';
                         return GestureDetector(
                           onTap: () {
-                            _playSound(instrument, ShakeAxis.lr);
+                            _playSound(instrument, 1.0);
                           },
                           child: Padding(
                             padding: const EdgeInsets.all(12.0),
@@ -397,6 +662,97 @@ class _MyHomePageState extends State<MyHomePage> with WidgetsBindingObserver {
                         },
                       ),
                     ),
+                    // instrument selection (for drum and hi-hat)'
+                    instruments[_currentIndex] == "drum"
+                        ? const SizedBox(height: 30.0)
+                        : const SizedBox(height: 0.0),
+                    instruments[_currentIndex] == "drum"
+                        ? Container(
+                            margin: const EdgeInsets.all(16.0),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                // Kick
+                                ElevatedButton(
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: selectedDrum == "kick"
+                                        ? _getPageColor(_currentIndex)
+                                            .withOpacity(0.8)
+                                        : Colors.grey,
+                                  ),
+                                  onPressed: () {
+                                    setState(() {
+                                      selectedDrum = "kick";
+                                    });
+                                  },
+                                  child: const Text("Kick Drum",
+                                      style: TextStyle(color: Colors.white)),
+                                ),
+                                const SizedBox(width: 16.0),
+                                // snare
+                                ElevatedButton(
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: selectedDrum == "snare"
+                                        ? _getPageColor(_currentIndex)
+                                            .withOpacity(0.8)
+                                        : Colors.grey,
+                                  ),
+                                  onPressed: () {
+                                    setState(() {
+                                      selectedDrum = "snare";
+                                    });
+                                  },
+                                  child: const Text("Snare Drum",
+                                      style: TextStyle(color: Colors.white)),
+                                ),
+                              ],
+                            ))
+                        : const SizedBox(height: 0.0),
+                    instruments[_currentIndex] == "hi-hat"
+                        ? const SizedBox(height: 30.0)
+                        : const SizedBox(height: 0.0),
+                    instruments[_currentIndex] == "hi-hat"
+                        ? Container(
+                            margin: const EdgeInsets.all(16.0),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                // Kick
+                                ElevatedButton(
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: selectedHiHat == "closed"
+                                        ? _getPageColor(_currentIndex)
+                                            .withOpacity(0.8)
+                                        : Colors.grey,
+                                  ),
+                                  onPressed: () {
+                                    setState(() {
+                                      selectedHiHat = "closed";
+                                    });
+                                  },
+                                  child: const Text("Closed",
+                                      style: TextStyle(color: Colors.white)),
+                                ),
+                                const SizedBox(width: 16.0),
+                                // snare
+                                ElevatedButton(
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: selectedHiHat == "open"
+                                        ? _getPageColor(_currentIndex)
+                                            .withOpacity(0.8)
+                                        : Colors.grey,
+                                  ),
+                                  onPressed: () {
+                                    setState(() {
+                                      selectedHiHat = "open";
+                                    });
+                                  },
+                                  child: const Text("Open",
+                                      style: TextStyle(color: Colors.white)),
+                                ),
+                              ],
+                            ))
+                        : const SizedBox(height: 0.0),
                   ],
                 ),
               ),
