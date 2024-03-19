@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:audioplayers/audioplayers.dart';
+import 'package:flutter_email_sender/flutter_email_sender.dart';
 import 'player_widget.dart';
 
 class RecordingsPage extends StatefulWidget {
@@ -113,12 +114,32 @@ class RecordingsPageState extends State<RecordingsPage> {
                                 Expanded(
                                   child: PlayerWidget(player: audioPlayers[index]),
                                 ),
-                                IconButton(
-                                  icon: const Icon(Icons.delete),
-                                  onPressed: () {
-                                    showDeleteConfirmationDialog(context, filePath, fileName);
-                                  },
-                                ),
+                                Column(
+                                  children: [
+                                    IconButton(
+                                      icon: const Icon(Icons.delete),
+                                      onPressed: () {
+                                        showDeleteConfirmationDialog(
+                                            context, filePath, fileName);
+                                      },
+                                    ),
+                                    IconButton(
+                                      icon: const Icon(Icons.send),
+                                      onPressed: () async {
+                                        final Email email = Email(
+                                          subject: 'User Study Instrument App Creation',
+                                          recipients: [],
+                                          attachmentPaths: [
+                                            filePath
+                                          ],
+                                          isHTML: false,
+                                        );
+
+                                        await FlutterEmailSender.send(email);
+                                      },
+                                    ),
+                                  ],
+                                )
                               ],
                             ),
                           ));
