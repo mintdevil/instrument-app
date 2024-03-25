@@ -118,8 +118,8 @@ class ShakeDetector {
         if (gRateMatch && gForceMA > shakeThresholdGravity) {
           // adjust loudness based on gForce
           double loudness = 1.0;
-          if (gForce < 1.5) {
-            loudness = (gForceMA - 1.3) / (1.5 - 1.3) * (1.0 - 0.2) + 0.2;
+          if (gForce < 2.0) {
+            loudness = (gForceMA - 1.3) / (2.0 - 1.3) * (1.0 - 0.2) + 0.2;
           }
 
           gRateMatch = false;
