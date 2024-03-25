@@ -12,6 +12,23 @@ double snapToBeat(double timestamp, double beat, double halfBeat) {
       .reduce((a, b) => (a - timestamp).abs() < (b - timestamp).abs() ? a : b);
 }
 
+List<double> calculateLatency(List<double> timestamps, double beat, double halfBeat) {
+  List<double> latencies = [];
+
+  for (double timestamp in timestamps) {
+    double nearestBeat = (timestamp / beat).roundToDouble() * beat;
+    double nearestHalfBeat = (timestamp / halfBeat).roundToDouble() * halfBeat;
+
+    double snappedTimestamp = [nearestBeat, nearestHalfBeat]
+        .reduce((a, b) => (a - timestamp).abs() < (b - timestamp).abs() ? a : b);
+
+    double latency = (snappedTimestamp - timestamp).abs();
+    latencies.add(latency);
+  }
+
+  return latencies;
+}
+
 // function to remove duplicates in timestamps and volumes
 List<List<double>> removeDuplicates(List<double> timestamps, List<double> volumes) {
   Set<double> uniqueTimestamps = {};
